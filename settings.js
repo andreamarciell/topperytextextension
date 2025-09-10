@@ -134,10 +134,22 @@ try {
 } catch {}
 
 function clearMessages(){
-  if (errorEl) errorEl.textContent='';
-  if (successEl) successEl.textContent='';
-  if (authErr) authErr.textContent='';
-  if (authOk) authOk.textContent='';
+  if (errorEl) {
+    errorEl.textContent='';
+    errorEl.style.display='none';
+  }
+  if (successEl) {
+    successEl.textContent='';
+    successEl.style.display='none';
+  }
+  if (authErr) {
+    authErr.textContent='';
+    authErr.style.display='none';
+  }
+  if (authOk) {
+    authOk.textContent='';
+    authOk.style.display='none';
+  }
 }
 
 function showApp() {
@@ -152,7 +164,10 @@ function showGate(msg) {
   appSection.style.display='none';
   toggleLogout(false);
   clearMessages();
-  if (msg) authErr.textContent = msg;
+  if (msg) {
+    authErr.textContent = msg;
+    authErr.style.display = 'block';
+  }
 }
 
 function toggleLogout(show) { logoutBtn.style.display = show ? 'inline-block' : 'none'; }
@@ -174,6 +189,7 @@ btnLogin?.addEventListener('click', async () => {
   // Basic validation
   if (!email || !password) { 
     authErr.textContent = 'inserisci email e password'; 
+    authErr.style.display = 'block';
     return; 
   }
   
@@ -181,11 +197,13 @@ btnLogin?.addEventListener('click', async () => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
     authErr.textContent = 'formato email non valido';
+    authErr.style.display = 'block';
     return;
   }
   
   if (password.length < 8) {
     authErr.textContent = 'password troppo corta (minimo 8 caratteri)';
+    authErr.style.display = 'block';
     return;
   }
   
@@ -198,18 +216,22 @@ btnLogin?.addEventListener('click', async () => {
     if (resp?.errorCode === 'email_not_verified') {
       showResend(true);
       authErr.textContent = 'devi verificare l\'email prima di accedere.';
+      authErr.style.display = 'block';
       return;
     }
     
     if (resp && resp.ok) {
       authOk.textContent = 'login effettuato ✓';
+      authOk.style.display = 'block';
       setTimeout(async () => { await render(); showApp(); }, 900);
     } else {
       authErr.textContent = resp?.error || 'login fallito';
+      authErr.style.display = 'block';
     }
   } catch (error) {
     console.error('Login error:', error);
     authErr.textContent = 'Errore durante il login';
+    authErr.style.display = 'block';
   }
 });
 
@@ -221,6 +243,7 @@ btnRegister?.addEventListener('click', async () => {
   // Basic validation
   if (!email || !password) { 
     authErr.textContent = 'inserisci email e password'; 
+    authErr.style.display = 'block';
     return; 
   }
   
@@ -228,6 +251,7 @@ btnRegister?.addEventListener('click', async () => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
     authErr.textContent = 'formato email non valido';
+    authErr.style.display = 'block';
     return;
   }
 
@@ -235,6 +259,7 @@ btnRegister?.addEventListener('click', async () => {
   const pwInfo = analyzePasswordClient(password, email);
   if (!pwInfo.ok) { 
     authErr.textContent = formatPasswordErrors(pwInfo); 
+    authErr.style.display = 'block';
     return; 
   }
 
@@ -247,25 +272,31 @@ btnRegister?.addEventListener('click', async () => {
     if (resp?.ok && resp.requiresVerification) {
       showResend(true);
       authOk.textContent = 'Registrazione ok. Ti abbiamo inviato un\'email di verifica. Controlla la casella e conferma per accedere.';
+      authOk.style.display = 'block';
     } else {
       if (resp && resp.error === 'weak_password') {
         // Prefer server details; otherwise, fallback to local analysis
         if (resp.failures || resp.suggestions) {
           authErr.textContent = formatPasswordErrors(resp);
+          authErr.style.display = 'block';
         } else if (resp.rules) {
           const local = analyzePasswordClient(password, email);
           authErr.textContent = !local.ok ? formatPasswordErrors(local) : ('password troppo debole: ' + resp.rules);
+          authErr.style.display = 'block';
         } else {
           const local = analyzePasswordClient(password, email);
           authErr.textContent = formatPasswordErrors(local);
+          authErr.style.display = 'block';
         }
       } else {
         authErr.textContent = resp?.error || 'registrazione fallita';
+        authErr.style.display = 'block';
       }
     }
   } catch (error) {
     console.error('Registration error:', error);
     authErr.textContent = 'Errore durante la registrazione';
+    authErr.style.display = 'block';
   }
 });
 
@@ -273,14 +304,43 @@ btnResend?.addEventListener('click', async (e) => {
   e.preventDefault();
   clearMessages();
   const email = (authEmail?.value || '').trim();
-  if (!email) { authErr.textContent='inserisci la tua email'; return; }
+  if (!email) { 
+    authErr.textContent='inserisci la tua email'; 
+    authErr.style.display = 'block';
+    return; 
+  }
   const resp = await chrome.runtime.sendMessage({ type: 'AUTH_RESEND_VERIFY', payload: { email } });
-  if (resp?.ok) { authOk.textContent = 'email di verifica inviata di nuovo.'; showResend(true); }
-  else authErr.textContent = resp?.error || 'impossibile inviare email';
+  if (resp?.ok) { 
+    authOk.textContent = 'email di verifica inviata di nuovo.'; 
+    authOk.style.display = 'block';
+    showResend(true); 
+  }
+  else {
+    authErr.textContent = resp?.error || 'impossibile inviare email';
+    authErr.style.display = 'block';
+  }
 });
 
-function setError(msg){ if (errorEl) errorEl.textContent = msg || ''; }
-function setSuccess(msg){ if (successEl) successEl.textContent = msg || ''; }
+function setError(msg){ 
+  if (errorEl) {
+    errorEl.textContent = msg || '';
+    if (msg) {
+      errorEl.style.display = 'block';
+    } else {
+      errorEl.style.display = 'none';
+    }
+  }
+}
+function setSuccess(msg){ 
+  if (successEl) {
+    successEl.textContent = msg || '';
+    if (msg) {
+      successEl.style.display = 'block';
+    } else {
+      successEl.style.display = 'none';
+    }
+  }
+}
 
 function renderItems(items) {
   listEl.innerHTML = '';

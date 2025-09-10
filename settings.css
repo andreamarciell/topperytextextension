@@ -394,6 +394,11 @@ html, body {
   border-radius: var(--radius-sm);
   font-size: 14px;
   font-weight: 500;
+  display: none; /* Hidden by default */
+}
+
+.message:not(:empty) {
+  display: block; /* Show only when there's content */
 }
 
 .message.success {
@@ -580,8 +585,22 @@ button.secondary:hover { background: var(--border-light); }
 .badge { background: var(--primary-blue); color: white; border: 1px solid var(--primary-blue); padding: 6px 10px; border-radius: 999px; white-space: nowrap; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; }
 .text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .actions button { padding: 6px 10px; }
-.error { color: var(--error); min-height: 18px; }
-.success { color: var(--success); min-height: 18px; }
+.error { 
+  color: var(--error); 
+  min-height: 18px; 
+  display: none; /* Hidden by default */
+}
+.error:not(:empty) { 
+  display: block; /* Show only when there's content */
+}
+.success { 
+  color: var(--success); 
+  min-height: 18px; 
+  display: none; /* Hidden by default */
+}
+.success:not(:empty) { 
+  display: block; /* Show only when there's content */
+}
 .container { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
 .row.gap { display: flex; gap: 0.5rem; align-items: center; }
 .mt-8 { margin-top: 0.75rem; }
