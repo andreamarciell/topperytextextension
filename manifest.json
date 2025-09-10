@@ -30,15 +30,25 @@
         "<all_urls>"
       ],
       "exclude_matches": [
-        "*://*.bank*/*",
+        "*://online.wellsfargo.com/*",
+        "*://www.wellsfargo.com/*",
+        "*://www.bankofamerica.com/*",
+        "*://online.citi.com/*",
+        "*://www.chase.com/*",
+        "*://www.usbank.com/*",
         "*://*.paypal.com/*",
-        "*://*.amazon.com/ap/*",
-        "*://*.google.com/accounts/*",
+        "*://www.amazon.com/ap/*",
+        "*://signin.aws.amazon.com/*",
         "*://accounts.google.com/*",
+        "*://*.google.com/accounts/*",
         "*://login.microsoftonline.com/*",
         "*://auth.openai.com/*",
         "*://github.com/login/*",
-        "*://www.facebook.com/login/*"
+        "*://github.com/sessions/*",
+        "*://www.facebook.com/login/*",
+        "*://appleid.apple.com/*",
+        "*://secure.login.gov/*",
+        "*://login.yahoo.com/*"
       ],
       "js": [
         "content.js"
