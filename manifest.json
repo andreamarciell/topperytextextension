@@ -49,11 +49,7 @@
         "*://www.facebook.com/login/*",
         "*://appleid.apple.com/*",
         "*://secure.login.gov/*",
-        "*://login.yahoo.com/*",
-        "*://chrome-extension://*/*",
-        "*://moz-extension://*/*",
-        "*://safari-extension://*/*",
-        "*://edge-extension://*/*"
+        "*://login.yahoo.com/*"
       ],
       "js": [
         "content.js"
