@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "TopText",
+  "version": "1.0.7",
+  "description": "Replaces your triggers with custom text anywhere in the browser in real time. Easy trigger management with backup/import from the settings page.",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "TopText",
+    "default_popup": "popup.html"
+  },
+  "options_page": "settings.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_end"
+    }
+  ]
+}

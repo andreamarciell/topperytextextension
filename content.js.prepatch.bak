@@ -1,0 +1,85 @@
+// Restored replacement engine: when user types a space, replace any matching triggers
+// in inputs, textareas, and contenteditable elements. Triggers come from background cache.
+
+let TRIGGERS = [];
+
+function fetchTriggers() {
+  chrome.runtime.sendMessage({ type: 'CACHE_GET' }, (resp) => {
+    TRIGGERS = (resp && Array.isArray(resp.items)) ? resp.items : [];
+  });
+}
+fetchTriggers();
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg && msg.type === 'CACHE_UPDATED') {
+    TRIGGERS = msg.payload.items || [];
+  }
+});
+
+function replaceInText(text) {
+  let out = text;
+  for (const t of TRIGGERS) {
+    if (!t || !t.trigger) continue;
+    const escaped = String(t.trigger).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // replace when trigger is a whole token separated by whitespace
+    const re = new RegExp('(^|\\s)' + escaped + '(?=\\s|$)', 'g');
+    out = out.replace(re, (m, p1) => p1 + (t.replacement || ''));
+  }
+  return out;
+}
+
+function onEditableInput(e) {
+  const target = e.target;
+  // only act when a space was inserted (keyboard or inputType)
+  const isSpace =
+    (e && (e.key === ' ' || e.code === 'Space')) ||
+    (e && e.inputType === 'insertText' && e.data === ' ');
+  if (!isSpace) return;
+
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    const value = target.value || '';
+    const before = value;
+    const after = replaceInText(before);
+    if (after !== before) {
+      const cursorPos = target.selectionStart;
+      const delta = after.length - before.length;
+      target.value = after;
+      if (typeof cursorPos === 'number') {
+        const pos = Math.max(0, cursorPos + delta);
+        target.selectionStart = target.selectionEnd = pos;
+      }
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    return;
+  }
+
+  // contenteditable
+  if (target && (target.isContentEditable || target.getAttribute?.('contenteditable') === 'true')) {
+    const before = target.innerText;
+    const after = replaceInText(before);
+    if (after !== before) {
+      target.innerText = after;
+      // try to keep caret at end
+      const sel = window.getSelection && window.getSelection();
+      if (sel && sel.rangeCount) {
+        sel.collapse(target, target.childNodes.length);
+      }
+    }
+  }
+}
+
+function attach(el) {
+  if (el._tt_attached) return;
+  el.addEventListener('keyup', onEditableInput, true);
+  el.addEventListener('input', onEditableInput, true);
+  el._tt_attached = true;
+}
+
+function scan() {
+  document.querySelectorAll('input, textarea, [contenteditable="true"]').forEach(attach);
+}
+
+scan();
+// observe dynamically added nodes
+const obs = new MutationObserver(() => scan());
+obs.observe(document.documentElement || document.body, { childList: true, subtree: true });

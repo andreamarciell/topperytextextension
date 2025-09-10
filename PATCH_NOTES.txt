@@ -1,0 +1,6 @@
+Patched on import/export triggers:
+- Added "Importa" and "Esporta" buttons in settings UI (below the Add button).
+- Added hidden file input for importing .json.
+- Implemented import/export logic in settings.js with validation, deduplication,
+  and safe fallbacks using chrome.runtime messaging.
+- (Optional) Added minimal CSS utility classes if settings.css exists.
