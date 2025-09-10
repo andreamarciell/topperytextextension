@@ -45,24 +45,43 @@ chrome.runtime.onMessage.addListener((msg) => {
 function sanitizeText(text) {
   if (typeof text !== 'string') return '';
   
-  // Remove potentially dangerous characters and patterns
+  // More comprehensive sanitization
   return text
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') // Remove script tags
-    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '') // Remove iframe tags
-    .replace(/javascript:/gi, '') // Remove javascript: protocols
-    .replace(/data:/gi, '') // Remove data: protocols
-    .replace(/vbscript:/gi, '') // Remove vbscript: protocols
-    .replace(/on\w+\s*=/gi, ''); // Remove event handlers like onclick=
+    // Remove all HTML tags
+    .replace(/<[^>]*>/g, '')
+    // Remove script content
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    // Remove iframe content
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    // Remove dangerous protocols
+    .replace(/javascript:/gi, '')
+    .replace(/data:/gi, '')
+    .replace(/vbscript:/gi, '')
+    .replace(/file:/gi, '')
+    .replace(/ftp:/gi, '')
+    // Remove event handlers
+    .replace(/on\w+\s*=/gi, '')
+    // Remove dangerous characters
+    .replace(/[<>\"'&]/g, '')
+    // Remove control characters
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    // Limit length
+    .substring(0, 1000);
 }
 
 function validateTrigger(trigger) {
   if (typeof trigger !== 'string') return false;
   if (trigger.length === 0 || trigger.length > 50) return false;
   
-  // Block dangerous characters and patterns
+  // Only allow alphanumeric characters, spaces, and basic punctuation
+  const allowedPattern = /^[a-zA-Z0-9\s\-_.,!?;:()]+$/;
+  if (!allowedPattern.test(trigger)) return false;
+  
+  // Block dangerous patterns
   const dangerousPatterns = [
     /<script/i, /<iframe/i, /javascript:/i, /data:/i, /vbscript:/i,
-    /on\w+\s*=/i, /[<>\"'&]/
+    /on\w+\s*=/i, /[<>\"'&]/, /eval\s*\(/i, /alert\s*\(/i,
+    /confirm\s*\(/i, /prompt\s*\(/i, /document\./i, /window\./i
   ];
   
   return !dangerousPatterns.some(pattern => pattern.test(trigger));
@@ -72,8 +91,16 @@ function validateReplacement(replacement) {
   if (typeof replacement !== 'string') return false;
   if (replacement.length > 500) return false; // Reasonable limit
   
-  // Allow some HTML but sanitize it
-  return true;
+  // Block dangerous patterns in replacement text
+  const dangerousPatterns = [
+    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+    /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi,
+    /javascript:/gi, /data:/gi, /vbscript:/gi, /file:/gi, /ftp:/gi,
+    /on\w+\s*=/gi, /eval\s*\(/i, /alert\s*\(/i, /confirm\s*\(/i,
+    /prompt\s*\(/i, /document\./i, /window\./i, /location\./i
+  ];
+  
+  return !dangerousPatterns.some(pattern => pattern.test(replacement));
 }
 
 function replaceInText(text) {

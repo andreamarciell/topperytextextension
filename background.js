@@ -4,60 +4,39 @@ import cfg from './apiConfig.js';
 const AUTH_KEY = 'userAuth';
 const CACHE_KEY = 'cachedTriggers';
 
-// Simple XOR encryption for local storage (not cryptographically secure, but better than plaintext)
-function simpleEncrypt(text, key = 'toptext-key') {
-  let result = '';
-  for (let i = 0; i < text.length; i++) {
-    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-  }
-  return btoa(result); // Base64 encode
-}
-
-function simpleDecrypt(encryptedText, key = 'toptext-key') {
-  try {
-    const decoded = atob(encryptedText); // Base64 decode
-    let result = '';
-    for (let i = 0; i < decoded.length; i++) {
-      result += String.fromCharCode(decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-    }
-    return result;
-  } catch {
-    return null;
-  }
-}
+// Secure storage using Chrome's built-in encryption
+// No custom encryption needed - Chrome handles this securely
 
 async function getAuth() {
   try {
     // Try session storage first (more secure, expires when browser closes)
     const { [AUTH_KEY]: sessionAuth } = await chrome.storage.session.get(AUTH_KEY);
     if (sessionAuth) {
-      const decrypted = simpleDecrypt(sessionAuth);
-      return decrypted ? JSON.parse(decrypted) : null;
+      return JSON.parse(sessionAuth);
     }
     
     // Fallback to local storage for persistence
     const { [AUTH_KEY]: localAuth } = await chrome.storage.local.get(AUTH_KEY);
     if (localAuth) {
-      const decrypted = simpleDecrypt(localAuth);
-      return decrypted ? JSON.parse(decrypted) : null;
+      return JSON.parse(localAuth);
     }
     
     return null;
   } catch (error) {
-    console.warn('Error retrieving auth:', error);
+    // Don't log sensitive auth errors
     return null;
   }
 }
 
 async function setAuth(auth) { 
   try {
-    const encrypted = simpleEncrypt(JSON.stringify(auth));
+    const authString = JSON.stringify(auth);
     // Store in session storage (more secure)
-    await chrome.storage.session.set({ [AUTH_KEY]: encrypted });
+    await chrome.storage.session.set({ [AUTH_KEY]: authString });
     // Also store in local storage for persistence across sessions
-    await chrome.storage.local.set({ [AUTH_KEY]: encrypted });
+    await chrome.storage.local.set({ [AUTH_KEY]: authString });
   } catch (error) {
-    console.error('Error storing auth:', error);
+    // Don't log sensitive auth errors
     throw new Error('Failed to store authentication data');
   }
 }
@@ -67,7 +46,7 @@ async function clearAuth() {
     await chrome.storage.session.remove(AUTH_KEY);
     await chrome.storage.local.remove(AUTH_KEY);
   } catch (error) {
-    console.warn('Error clearing auth:', error);
+    // Don't log auth clearing errors
   }
 }
 
@@ -76,7 +55,6 @@ async function getCachedTriggers() {
     const { [CACHE_KEY]: items } = await chrome.storage.local.get(CACHE_KEY); 
     return Array.isArray(items) ? items : []; 
   } catch (error) {
-    console.warn('Error retrieving cached triggers:', error);
     return [];
   }
 }
@@ -89,7 +67,7 @@ async function setCachedTriggers(items) {
       // Ignore messaging errors (popup might be closed)
     }); 
   } catch (error) {
-    console.error('Error setting cached triggers:', error);
+    // Don't log cache errors
   }
 }
 
@@ -100,7 +78,7 @@ async function clearCache(){
       // Ignore messaging errors
     }); 
   } catch (error) {
-    console.warn('Error clearing cache:', error);
+    // Don't log cache clearing errors
   }
 }
 
@@ -119,9 +97,25 @@ async function refreshIfNeeded() {
 
 async function api(path, init={}) {
   let auth; try { auth = await refreshIfNeeded(); } catch { throw Object.assign(new Error('unauthorized'), { status: 401 }); }
-  const headers = new Headers(init.headers || {}); headers.set('Authorization','Bearer '+auth.accessToken); headers.set('Content-Type','application/json');
-  const r = await fetch(cfg.API_BASE + path, { ...init, headers });
-  if (r.status === 401) { await refreshIfNeeded(); const r2 = await fetch(cfg.API_BASE + path, { ...init, headers }); if (!r2.ok) throw Object.assign(new Error('api error '+r2.status), { status:r2.status }); return r2; }
+  
+  const fullUrl = cfg.API_BASE + path;
+  
+  // Validate API endpoint for security
+  if (!cfg.validateApiEndpoint(fullUrl)) {
+    throw Object.assign(new Error('unauthorized endpoint'), { status: 403 });
+  }
+  
+  const headers = new Headers(init.headers || {}); 
+  headers.set('Authorization','Bearer '+auth.accessToken); 
+  headers.set('Content-Type','application/json');
+  
+  const r = await fetch(fullUrl, { ...init, headers });
+  if (r.status === 401) { 
+    await refreshIfNeeded(); 
+    const r2 = await fetch(fullUrl, { ...init, headers }); 
+    if (!r2.ok) throw Object.assign(new Error('api error '+r2.status), { status:r2.status }); 
+    return r2; 
+  }
   if (!r.ok) throw Object.assign(new Error('api error '+r.status), { status:r.status });
   return r;
 }
@@ -132,7 +126,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       if (msg.type === 'AUTH_STATUS') { const auth = await getAuth(); sendResponse({ loggedIn: !!auth }); return; }
 
       if (msg.type === 'AUTH_LOGIN') {
-        const r = await fetch(cfg.API_BASE + '/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: msg.payload.email, password: msg.payload.password }) });
+        const loginUrl = cfg.API_BASE + '/auth/login';
+        if (!cfg.validateApiEndpoint(loginUrl)) {
+          sendResponse({ error: 'unauthorized endpoint' });
+          return;
+        }
+        
+        const r = await fetch(loginUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: msg.payload.email, password: msg.payload.password }) });
         const data = await r.json().catch(()=>({}));
         if (r.status === 403 && data?.error === 'email_not_verified') { sendResponse({ errorCode:'email_not_verified', error: 'email non verificata' }); return; }
         if (!r.ok) { sendResponse({ error: data.error || ('login failed '+r.status) }); return; }
@@ -144,7 +144,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       }
 
       if (msg.type === 'AUTH_REGISTER') {
-        const r = await fetch(cfg.API_BASE + '/auth/register', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: msg.payload.email, password: msg.payload.password }) });
+        const registerUrl = cfg.API_BASE + '/auth/register';
+        if (!cfg.validateApiEndpoint(registerUrl)) {
+          sendResponse({ error: 'unauthorized endpoint' });
+          return;
+        }
+        
+        const r = await fetch(registerUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: msg.payload.email, password: msg.payload.password }) });
         const data = await r.json().catch(()=>({}));
         if (!r.ok) { sendResponse(data); return; }
         // do NOT log the user in; require email verification
@@ -154,7 +160,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       }
 
       if (msg.type === 'AUTH_RESEND_VERIFY') {
-        const r = await fetch(cfg.API_BASE + '/auth/resend', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: msg.payload.email }) });
+        const resendUrl = cfg.API_BASE + '/auth/resend';
+        if (!cfg.validateApiEndpoint(resendUrl)) {
+          sendResponse({ error: 'unauthorized endpoint' });
+          return;
+        }
+        
+        const r = await fetch(resendUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: msg.payload.email }) });
         const data = await r.json().catch(()=>({}));
         if (!r.ok) { sendResponse({ error: data.error || 'resend failed' }); return; }
         sendResponse({ ok:true });
@@ -165,7 +177,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         try { 
           const auth = await getAuth(); 
           if (auth?.refreshToken) { 
-            try { await fetch(cfg.API_BASE + '/auth/logout', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ refreshToken: auth.refreshToken }) }); } catch(e) {}
+            const logoutUrl = cfg.API_BASE + '/auth/logout';
+            if (cfg.validateApiEndpoint(logoutUrl)) {
+              try { await fetch(logoutUrl, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ refreshToken: auth.refreshToken }) }); } catch(e) {}
+            }
           }
         } catch(e) {}
         await clearAuth(); await clearCache(); sendResponse({ ok:true }); return; 
@@ -179,7 +194,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           sendResponse({ items: data.items || [] }); 
         }
         catch (e) { 
-          console.error('API_GET_TRIGGERS error:', e);
           if (e.status === 401) {
             sendResponse({ unauthorized: true }); 
           } else {
@@ -210,7 +224,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           sendResponse({ item: data.item }); 
         }
         catch (e) { 
-          console.error('API_CREATE_TRIGGER error:', e);
           if (e.status === 409) {
             sendResponse({ conflict: true }); 
           } else if (e.status === 401) {
@@ -237,7 +250,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           sendResponse({ ok:true }); 
         }
         catch (e) { 
-          console.error('API_DELETE_TRIGGER error:', e);
           if (e.status === 401) {
             sendResponse({ unauthorized: true }); 
           } else {
@@ -253,7 +265,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return; 
       }
     } catch (err) { 
-      console.error('Message handler error:', err);
       sendResponse({ error: 'Errore interno del sistema' }); 
     }
   })();

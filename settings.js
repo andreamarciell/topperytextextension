@@ -403,11 +403,20 @@ async function createTriggerSafe(trigger, replacement) {
 }
 
 function downloadJSON(filename, dataObj) {
-  const blob = new Blob([JSON.stringify(dataObj, null, 2)], { type: 'application/json' });
+  // Validate filename
+  const safeFilename = filename.replace(/[^a-zA-Z0-9\-_\.]/g, '_');
+  
+  // Sanitize data before export
+  const sanitizedData = dataObj.map(item => ({
+    trigger: sanitizeInput(item.trigger || ''),
+    replacement: sanitizeInput(item.replacement || '')
+  })).filter(item => item.trigger && item.replacement);
+  
+  const blob = new Blob([JSON.stringify(sanitizedData, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename;
+  a.download = safeFilename;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -430,33 +439,32 @@ function isValidTriggerString(s) {
   const trimmed = s.trim();
   if (trimmed.length === 0 || trimmed.length > 50) return false;
   
-  // Block dangerous characters and patterns
+  // Only allow alphanumeric characters, spaces, and basic punctuation
+  const allowedPattern = /^[a-zA-Z0-9\s\-_.,!?;:()]+$/;
+  if (!allowedPattern.test(trimmed)) return false;
+  
+  // Block dangerous patterns
   const dangerousPatterns = [
     /<script/i, /<iframe/i, /javascript:/i, /data:/i, /vbscript:/i,
-    /on\w+\s*=/i, /[<>\"'&]/
+    /on\w+\s*=/i, /[<>\"'&]/, /eval\s*\(/i, /alert\s*\(/i,
+    /confirm\s*\(/i, /prompt\s*\(/i, /document\./i, /window\./i,
+    /location\./i, /file:/i, /ftp:/i
   ];
   
-  if (dangerousPatterns.some(pattern => pattern.test(trimmed))) return false;
-  
-  // Block common XSS patterns
-  const xssPatterns = [
-    /alert\s*\(/i, /confirm\s*\(/i, /prompt\s*\(/i, /eval\s*\(/i,
-    /document\./i, /window\./i, /location\./i
-  ];
-  
-  return !xssPatterns.some(pattern => pattern.test(trimmed));
+  return !dangerousPatterns.some(pattern => pattern.test(trimmed));
 }
 
 function isValidReplacementString(s) {
   if (typeof s !== 'string') return false;
   if (s.length > 500) return false; // Reasonable limit
   
-  // Block script tags and dangerous patterns
+  // Block dangerous patterns in replacement text
   const dangerousPatterns = [
     /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
     /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi,
-    /javascript:/gi, /data:/gi, /vbscript:/gi,
-    /on\w+\s*=/gi
+    /javascript:/gi, /data:/gi, /vbscript:/gi, /file:/gi, /ftp:/gi,
+    /on\w+\s*=/gi, /eval\s*\(/i, /alert\s*\(/i, /confirm\s*\(/i,
+    /prompt\s*\(/i, /document\./i, /window\./i, /location\./i
   ];
   
   return !dangerousPatterns.some(pattern => pattern.test(s));
@@ -466,12 +474,26 @@ function sanitizeInput(input) {
   if (typeof input !== 'string') return '';
   
   return input
+    // Remove all HTML tags
+    .replace(/<[^>]*>/g, '')
+    // Remove script content
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    // Remove iframe content
     .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    // Remove dangerous protocols
     .replace(/javascript:/gi, '')
     .replace(/data:/gi, '')
     .replace(/vbscript:/gi, '')
-    .replace(/on\w+\s*=/gi, '');
+    .replace(/file:/gi, '')
+    .replace(/ftp:/gi, '')
+    // Remove event handlers
+    .replace(/on\w+\s*=/gi, '')
+    // Remove dangerous characters
+    .replace(/[<>\"'&]/g, '')
+    // Remove control characters
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    // Limit length
+    .substring(0, 1000);
 }
 
 // ——— EXPORT ———
@@ -506,15 +528,36 @@ if (typeof fileInput !== 'undefined' && fileInput) {
   fileInput.addEventListener('change', async (ev) => {
     const file = ev.target?.files?.[0];
     if (!file) return;
+    
+    // Validate file size (max 1MB)
+    if (file.size > 1024 * 1024) {
+      if (typeof setError === 'function') setError('file troppo grande (max 1MB)');
+      return;
+    }
+    
     if (file.type && file.type !== 'application/json') {
       if (typeof setError === 'function') setError('seleziona un file .json valido');
       return;
     }
+    
     try {
       const text = await file.text();
+      
+      // Validate JSON size
+      if (text.length > 1000000) { // 1MB limit
+        if (typeof setError === 'function') setError('contenuto file troppo grande');
+        return;
+      }
+      
       const raw = JSON.parse(text);
       if (!Array.isArray(raw)) {
         if (typeof setError === 'function') setError('formato non valido: atteso un array di oggetti {trigger, replacement}');
+        return;
+      }
+      
+      // Limit number of items
+      if (raw.length > 1000) {
+        if (typeof setError === 'function') setError('troppi trigger nel file (max 1000)');
         return;
       }
       const current = await getAllTriggersSafe();
@@ -522,11 +565,17 @@ if (typeof fileInput !== 'undefined' && fileInput) {
       const normalized = raw
         .map(normalizeImported)
         .filter(Boolean)
-        .filter(x => isValidTriggerString(x.trigger) && isValidReplacementString(x.replacement))
+        .filter(x => {
+          // Additional validation for imported data
+          if (!x || typeof x !== 'object') return false;
+          if (!x.trigger || !x.replacement) return false;
+          return isValidTriggerString(x.trigger) && isValidReplacementString(x.replacement);
+        })
         .map(x => ({
           trigger: sanitizeInput(x.trigger),
           replacement: sanitizeInput(x.replacement)
-        }));
+        }))
+        .filter(x => x.trigger && x.replacement); // Remove empty entries after sanitization
       const toCreate = [];
       for (const item of normalized) {
         const key = item.trigger.trim().toLowerCase();
