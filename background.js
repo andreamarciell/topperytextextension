@@ -4,15 +4,105 @@ import cfg from './apiConfig.js';
 const AUTH_KEY = 'userAuth';
 const CACHE_KEY = 'cachedTriggers';
 
-async function getAuth() {
-  const { [AUTH_KEY]: auth } = await chrome.storage.local.get(AUTH_KEY);
-  return auth || null;
+// Simple XOR encryption for local storage (not cryptographically secure, but better than plaintext)
+function simpleEncrypt(text, key = 'toptext-key') {
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  }
+  return btoa(result); // Base64 encode
 }
-async function setAuth(auth) { await chrome.storage.local.set({ [AUTH_KEY]: auth }); }
-async function clearAuth() { await chrome.storage.local.remove(AUTH_KEY); }
-async function getCachedTriggers() { const { [CACHE_KEY]: items } = await chrome.storage.local.get(CACHE_KEY); return items || []; }
-async function setCachedTriggers(items) { await chrome.storage.local.set({ [CACHE_KEY]: items || [] }); chrome.runtime.sendMessage({ type:'CACHE_UPDATED', payload:{ items: items || [] } }).catch(()=>{}); }
-async function clearCache(){ await chrome.storage.local.remove(CACHE_KEY); chrome.runtime.sendMessage({ type:'CACHE_UPDATED', payload:{ items: [] } }).catch(()=>{}); }
+
+function simpleDecrypt(encryptedText, key = 'toptext-key') {
+  try {
+    const decoded = atob(encryptedText); // Base64 decode
+    let result = '';
+    for (let i = 0; i < decoded.length; i++) {
+      result += String.fromCharCode(decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    }
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+async function getAuth() {
+  try {
+    // Try session storage first (more secure, expires when browser closes)
+    const { [AUTH_KEY]: sessionAuth } = await chrome.storage.session.get(AUTH_KEY);
+    if (sessionAuth) {
+      const decrypted = simpleDecrypt(sessionAuth);
+      return decrypted ? JSON.parse(decrypted) : null;
+    }
+    
+    // Fallback to local storage for persistence
+    const { [AUTH_KEY]: localAuth } = await chrome.storage.local.get(AUTH_KEY);
+    if (localAuth) {
+      const decrypted = simpleDecrypt(localAuth);
+      return decrypted ? JSON.parse(decrypted) : null;
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn('Error retrieving auth:', error);
+    return null;
+  }
+}
+
+async function setAuth(auth) { 
+  try {
+    const encrypted = simpleEncrypt(JSON.stringify(auth));
+    // Store in session storage (more secure)
+    await chrome.storage.session.set({ [AUTH_KEY]: encrypted });
+    // Also store in local storage for persistence across sessions
+    await chrome.storage.local.set({ [AUTH_KEY]: encrypted });
+  } catch (error) {
+    console.error('Error storing auth:', error);
+    throw new Error('Failed to store authentication data');
+  }
+}
+
+async function clearAuth() { 
+  try {
+    await chrome.storage.session.remove(AUTH_KEY);
+    await chrome.storage.local.remove(AUTH_KEY);
+  } catch (error) {
+    console.warn('Error clearing auth:', error);
+  }
+}
+
+async function getCachedTriggers() { 
+  try {
+    const { [CACHE_KEY]: items } = await chrome.storage.local.get(CACHE_KEY); 
+    return Array.isArray(items) ? items : []; 
+  } catch (error) {
+    console.warn('Error retrieving cached triggers:', error);
+    return [];
+  }
+}
+
+async function setCachedTriggers(items) { 
+  try {
+    const validItems = Array.isArray(items) ? items : [];
+    await chrome.storage.local.set({ [CACHE_KEY]: validItems }); 
+    chrome.runtime.sendMessage({ type:'CACHE_UPDATED', payload:{ items: validItems } }).catch(() => {
+      // Ignore messaging errors (popup might be closed)
+    }); 
+  } catch (error) {
+    console.error('Error setting cached triggers:', error);
+  }
+}
+
+async function clearCache(){ 
+  try {
+    await chrome.storage.local.remove(CACHE_KEY); 
+    chrome.runtime.sendMessage({ type:'CACHE_UPDATED', payload:{ items: [] } }).catch(() => {
+      // Ignore messaging errors
+    }); 
+  } catch (error) {
+    console.warn('Error clearing cache:', error);
+  }
+}
 
 function isExpired(auth) { if (!auth || !auth.expiresAt) return true; const skew=30; return (Date.now()/1000) > (auth.expiresAt - skew); }
 
@@ -82,25 +172,90 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       }
 
       if (msg.type === 'API_GET_TRIGGERS') {
-        try { const r = await api('/triggers', { method:'GET' }); const data = await r.json(); await setCachedTriggers(data.items || []); sendResponse({ items: data.items || [] }); }
-        catch (e) { if (e.status === 401) sendResponse({ unauthorized:true }); else sendResponse({ error:String(e) }); }
+        try { 
+          const r = await api('/triggers', { method:'GET' }); 
+          const data = await r.json(); 
+          await setCachedTriggers(data.items || []); 
+          sendResponse({ items: data.items || [] }); 
+        }
+        catch (e) { 
+          console.error('API_GET_TRIGGERS error:', e);
+          if (e.status === 401) {
+            sendResponse({ unauthorized: true }); 
+          } else {
+            sendResponse({ error: 'Errore nel recupero dei trigger' }); 
+          }
+        }
         return;
       }
 
       if (msg.type === 'API_CREATE_TRIGGER') {
-        try { const r = await api('/triggers', { method:'POST', body: JSON.stringify({ trigger: msg.payload.trigger, replacement: msg.payload.replacement }) }); const data = await r.json(); const cur = await getCachedTriggers(); await setCachedTriggers([data.item, ...cur]); sendResponse({ item: data.item }); }
-        catch (e) { if (e.status === 409) sendResponse({ conflict:true }); else if (e.status === 401) sendResponse({ unauthorized:true }); else sendResponse({ error:String(e) }); }
+        try { 
+          // Validate input
+          if (!msg.payload || typeof msg.payload.trigger !== 'string' || msg.payload.trigger.trim().length === 0) {
+            sendResponse({ error: 'Trigger non valido' });
+            return;
+          }
+          
+          const r = await api('/triggers', { 
+            method:'POST', 
+            body: JSON.stringify({ 
+              trigger: msg.payload.trigger, 
+              replacement: msg.payload.replacement 
+            }) 
+          }); 
+          const data = await r.json(); 
+          const cur = await getCachedTriggers(); 
+          await setCachedTriggers([data.item, ...cur]); 
+          sendResponse({ item: data.item }); 
+        }
+        catch (e) { 
+          console.error('API_CREATE_TRIGGER error:', e);
+          if (e.status === 409) {
+            sendResponse({ conflict: true }); 
+          } else if (e.status === 401) {
+            sendResponse({ unauthorized: true }); 
+          } else {
+            sendResponse({ error: 'Errore nella creazione del trigger' }); 
+          }
+        }
         return;
       }
 
       if (msg.type === 'API_DELETE_TRIGGER') {
-        try { const id = msg.payload.id; await api('/triggers?'+new URLSearchParams({id}).toString(), { method:'DELETE' }); const cur = await getCachedTriggers(); await setCachedTriggers(cur.filter(x=>x.id!==id)); sendResponse({ ok:true }); }
-        catch (e) { if (e.status === 401) sendResponse({ unauthorized:true }); else sendResponse({ error:String(e) }); }
+        try { 
+          // Validate input
+          if (!msg.payload || !msg.payload.id) {
+            sendResponse({ error: 'ID trigger non valido' });
+            return;
+          }
+          
+          const id = msg.payload.id; 
+          await api('/triggers?'+new URLSearchParams({id}).toString(), { method:'DELETE' }); 
+          const cur = await getCachedTriggers(); 
+          await setCachedTriggers(cur.filter(x=>x.id!==id)); 
+          sendResponse({ ok:true }); 
+        }
+        catch (e) { 
+          console.error('API_DELETE_TRIGGER error:', e);
+          if (e.status === 401) {
+            sendResponse({ unauthorized: true }); 
+          } else {
+            sendResponse({ error: 'Errore nell\'eliminazione del trigger' }); 
+          }
+        }
         return;
       }
 
-      if (msg.type === 'CACHE_GET') { const items = await getCachedTriggers(); sendResponse({ items }); return; }
-    } catch (err) { sendResponse({ error:String(err) }); }
+      if (msg.type === 'CACHE_GET') { 
+        const items = await getCachedTriggers(); 
+        sendResponse({ items }); 
+        return; 
+      }
+    } catch (err) { 
+      console.error('Message handler error:', err);
+      sendResponse({ error: 'Errore interno del sistema' }); 
+    }
   })();
   return true;
 });

@@ -168,50 +168,104 @@ logoutBtn?.addEventListener('click', async () => {
 
 btnLogin?.addEventListener('click', async () => {
   clearMessages();
-  const email = (authEmail?.value || '').trim(); const password = authPass?.value || '';
-  if (!email || !password) { authErr.textContent = 'inserisci email e password'; return; }
-  const resp = await chrome.runtime.sendMessage({ type: 'AUTH_LOGIN', payload: { email, password } });
-  if (resp?.errorCode === 'email_not_verified') {
-    showResend(true);
-    authErr.textContent = 'devi verificare l\'email prima di accedere.';
+  const email = sanitizeInput((authEmail?.value || '').trim()); 
+  const password = authPass?.value || ''; // Don't sanitize password, just validate
+  
+  // Basic validation
+  if (!email || !password) { 
+    authErr.textContent = 'inserisci email e password'; 
+    return; 
+  }
+  
+  // Email validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    authErr.textContent = 'formato email non valido';
     return;
   }
-  if (resp && resp.ok) {
-    authOk.textContent = 'login effettuato ✓';
-    setTimeout(async () => { await render(); showApp(); }, 900);
-  } else {
-    authErr.textContent = resp?.error || 'login fallito';
+  
+  if (password.length < 8) {
+    authErr.textContent = 'password troppo corta (minimo 8 caratteri)';
+    return;
+  }
+  
+  try {
+    const resp = await chrome.runtime.sendMessage({ 
+      type: 'AUTH_LOGIN', 
+      payload: { email, password } 
+    });
+    
+    if (resp?.errorCode === 'email_not_verified') {
+      showResend(true);
+      authErr.textContent = 'devi verificare l\'email prima di accedere.';
+      return;
+    }
+    
+    if (resp && resp.ok) {
+      authOk.textContent = 'login effettuato ✓';
+      setTimeout(async () => { await render(); showApp(); }, 900);
+    } else {
+      authErr.textContent = resp?.error || 'login fallito';
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    authErr.textContent = 'Errore durante il login';
   }
 });
 
 btnRegister?.addEventListener('click', async () => {
   clearMessages();
-  const email = (authEmail?.value || '').trim(); const password = authPass?.value || '';
-  if (!email || !password) { authErr.textContent = 'inserisci email e password'; return; }
+  const email = sanitizeInput((authEmail?.value || '').trim()); 
+  const password = authPass?.value || '';
+  
+  // Basic validation
+  if (!email || !password) { 
+    authErr.textContent = 'inserisci email e password'; 
+    return; 
+  }
+  
+  // Email validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    authErr.textContent = 'formato email non valido';
+    return;
+  }
 
   // Client-side password analysis for immediate feedback
   const pwInfo = analyzePasswordClient(password, email);
-  if (!pwInfo.ok) { authErr.textContent = formatPasswordErrors(pwInfo); return; }
+  if (!pwInfo.ok) { 
+    authErr.textContent = formatPasswordErrors(pwInfo); 
+    return; 
+  }
 
-  const resp = await chrome.runtime.sendMessage({ type: 'AUTH_REGISTER', payload: { email, password } });
-  if (resp?.ok && resp.requiresVerification) {
-    showResend(true);
-    authOk.textContent = 'Registrazione ok. Ti abbiamo inviato un’email di verifica. Controlla la casella e conferma per accedere.';
-  } else {
-    if (resp && resp.error === 'weak_password') {
-      // Prefer server details; otherwise, fallback to local analysis
-      if (resp.failures || resp.suggestions) {
-        authErr.textContent = formatPasswordErrors(resp);
-      } else if (resp.rules) {
-        const local = analyzePasswordClient(password, email);
-        authErr.textContent = !local.ok ? formatPasswordErrors(local) : ('password troppo debole: ' + resp.rules);
-      } else {
-        const local = analyzePasswordClient(password, email);
-        authErr.textContent = formatPasswordErrors(local);
-      }
+  try {
+    const resp = await chrome.runtime.sendMessage({ 
+      type: 'AUTH_REGISTER', 
+      payload: { email, password } 
+    });
+    
+    if (resp?.ok && resp.requiresVerification) {
+      showResend(true);
+      authOk.textContent = 'Registrazione ok. Ti abbiamo inviato un\'email di verifica. Controlla la casella e conferma per accedere.';
     } else {
-      authErr.textContent = resp?.error || 'registrazione fallita';
+      if (resp && resp.error === 'weak_password') {
+        // Prefer server details; otherwise, fallback to local analysis
+        if (resp.failures || resp.suggestions) {
+          authErr.textContent = formatPasswordErrors(resp);
+        } else if (resp.rules) {
+          const local = analyzePasswordClient(password, email);
+          authErr.textContent = !local.ok ? formatPasswordErrors(local) : ('password troppo debole: ' + resp.rules);
+        } else {
+          const local = analyzePasswordClient(password, email);
+          authErr.textContent = formatPasswordErrors(local);
+        }
+      } else {
+        authErr.textContent = resp?.error || 'registrazione fallita';
+      }
     }
+  } catch (error) {
+    console.error('Registration error:', error);
+    authErr.textContent = 'Errore durante la registrazione';
   }
 });
 
@@ -255,16 +309,58 @@ const validateLocalDuplicate = (trigger, items) => (items||[]).some(t => t.trigg
 
 saveBtn?.addEventListener('click', async () => {
   clearMessages();
-  const trigger = (inputTrigger.value || '').trim();
-  const replacement = (inputReplacement.value || '').trim();
-  if (!trigger) { setError('inserisci un trigger'); return; }
+  const trigger = sanitizeInput((inputTrigger.value || '').trim());
+  const replacement = sanitizeInput((inputReplacement.value || '').trim());
+  
+  // Enhanced validation
+  if (!trigger) { 
+    setError('inserisci un trigger'); 
+    return; 
+  }
+  
+  if (!isValidTriggerString(trigger)) {
+    setError('trigger non valido: evita caratteri speciali e script');
+    return;
+  }
+  
+  if (!isValidReplacementString(replacement)) {
+    setError('testo sostitutivo non valido: evita script e contenuti pericolosi');
+    return;
+  }
+  
   const items = await apiGetTriggers();
-  if (validateLocalDuplicate(trigger, items)) { setError('trigger già esistente'); return; }
-  const resp = await chrome.runtime.sendMessage({ type: 'API_CREATE_TRIGGER', payload: { trigger, replacement } });
-  if (resp?.unauthorized) { showGate('sessione scaduta — effettua di nuovo il login'); return; }
-  if (resp?.conflict) { setError('trigger già esistente'); return; }
-  if (resp?.error) { setError(resp.error); return; }
-  inputTrigger.value=''; inputReplacement.value=''; setSuccess('salvato ✓'); await render();
+  if (validateLocalDuplicate(trigger, items)) { 
+    setError('trigger già esistente'); 
+    return; 
+  }
+  
+  try {
+    const resp = await chrome.runtime.sendMessage({ 
+      type: 'API_CREATE_TRIGGER', 
+      payload: { trigger, replacement } 
+    });
+    
+    if (resp?.unauthorized) { 
+      showGate('sessione scaduta — effettua di nuovo il login'); 
+      return; 
+    }
+    if (resp?.conflict) { 
+      setError('trigger già esistente'); 
+      return; 
+    }
+    if (resp?.error) { 
+      setError(resp.error); 
+      return; 
+    }
+    
+    inputTrigger.value=''; 
+    inputReplacement.value=''; 
+    setSuccess('salvato ✓'); 
+    await render();
+  } catch (error) {
+    console.error('Error creating trigger:', error);
+    setError('Errore nel salvataggio del trigger');
+  }
 });
 
 async function ensureAuth(){ const st = await chrome.runtime.sendMessage({ type:'AUTH_STATUS' }); return !!st?.loggedIn; }
@@ -330,7 +426,52 @@ function normalizeImported(input) {
 }
 
 function isValidTriggerString(s) {
-  return typeof s === 'string' && s.trim().length > 0 && s.trim().length <= 200;
+  if (typeof s !== 'string') return false;
+  const trimmed = s.trim();
+  if (trimmed.length === 0 || trimmed.length > 50) return false;
+  
+  // Block dangerous characters and patterns
+  const dangerousPatterns = [
+    /<script/i, /<iframe/i, /javascript:/i, /data:/i, /vbscript:/i,
+    /on\w+\s*=/i, /[<>\"'&]/
+  ];
+  
+  if (dangerousPatterns.some(pattern => pattern.test(trimmed))) return false;
+  
+  // Block common XSS patterns
+  const xssPatterns = [
+    /alert\s*\(/i, /confirm\s*\(/i, /prompt\s*\(/i, /eval\s*\(/i,
+    /document\./i, /window\./i, /location\./i
+  ];
+  
+  return !xssPatterns.some(pattern => pattern.test(trimmed));
+}
+
+function isValidReplacementString(s) {
+  if (typeof s !== 'string') return false;
+  if (s.length > 500) return false; // Reasonable limit
+  
+  // Block script tags and dangerous patterns
+  const dangerousPatterns = [
+    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+    /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi,
+    /javascript:/gi, /data:/gi, /vbscript:/gi,
+    /on\w+\s*=/gi
+  ];
+  
+  return !dangerousPatterns.some(pattern => pattern.test(s));
+}
+
+function sanitizeInput(input) {
+  if (typeof input !== 'string') return '';
+  
+  return input
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/data:/gi, '')
+    .replace(/vbscript:/gi, '')
+    .replace(/on\w+\s*=/gi, '');
 }
 
 // ——— EXPORT ———
@@ -381,7 +522,11 @@ if (typeof fileInput !== 'undefined' && fileInput) {
       const normalized = raw
         .map(normalizeImported)
         .filter(Boolean)
-        .filter(x => isValidTriggerString(x.trigger) && isValidTriggerString(x.replacement));
+        .filter(x => isValidTriggerString(x.trigger) && isValidReplacementString(x.replacement))
+        .map(x => ({
+          trigger: sanitizeInput(x.trigger),
+          replacement: sanitizeInput(x.replacement)
+        }));
       const toCreate = [];
       for (const item of normalized) {
         const key = item.trigger.trim().toLowerCase();

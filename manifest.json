@@ -13,7 +13,7 @@
     "scripting"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "https://topperytext.netlify.app/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -29,10 +29,24 @@
       "matches": [
         "<all_urls>"
       ],
+      "exclude_matches": [
+        "*://*.bank*/*",
+        "*://*.paypal.com/*",
+        "*://*.amazon.com/ap/*",
+        "*://*.google.com/accounts/*",
+        "*://accounts.google.com/*",
+        "*://login.microsoftonline.com/*",
+        "*://auth.openai.com/*",
+        "*://github.com/login/*",
+        "*://www.facebook.com/login/*"
+      ],
       "js": [
         "content.js"
       ],
       "run_at": "document_end"
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://topperytext.netlify.app;"
+  }
 }
