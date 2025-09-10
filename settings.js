@@ -287,13 +287,28 @@ function renderItems(items) {
   const arr = Array.isArray(items) ? items : [];
   countEl.textContent = String(arr.length);
   for (const it of arr) {
-    const li = document.createElement('li'); li.className='item';
-    const badge = document.createElement('span'); badge.className='badge'; badge.textContent = it.trigger;
-    const text = document.createElement('span'); text.className='text'; text.textContent = it.replacement || '';
-    const actions = document.createElement('div'); actions.className='actions';
-    const btnDel = document.createElement('button'); btnDel.textContent='elimina';
-    btnDel.addEventListener('click', async () => { const r = await chrome.runtime.sendMessage({ type:'API_DELETE_TRIGGER', payload:{ id: it.id }}); if (r?.unauthorized) return showGate('sessione scaduta — effettua di nuovo il login'); await render(); });
-    actions.appendChild(btnDel); li.appendChild(badge); li.appendChild(text); li.appendChild(actions); listEl.appendChild(li);
+    const li = document.createElement('li'); 
+    li.className='trigger-item';
+    const badge = document.createElement('span'); 
+    badge.className='trigger-badge'; 
+    badge.textContent = it.trigger;
+    const text = document.createElement('span'); 
+    text.className='trigger-text'; 
+    text.textContent = it.replacement || '';
+    const actions = document.createElement('div'); 
+    actions.className='trigger-actions';
+    const btnDel = document.createElement('button'); 
+    btnDel.textContent='Elimina';
+    btnDel.addEventListener('click', async () => { 
+      const r = await chrome.runtime.sendMessage({ type:'API_DELETE_TRIGGER', payload:{ id: it.id }}); 
+      if (r?.unauthorized) return showGate('sessione scaduta — effettua di nuovo il login'); 
+      await render(); 
+    });
+    actions.appendChild(btnDel); 
+    li.appendChild(badge); 
+    li.appendChild(text); 
+    li.appendChild(actions); 
+    listEl.appendChild(li);
   }
 }
 

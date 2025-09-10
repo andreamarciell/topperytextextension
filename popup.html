@@ -7,10 +7,44 @@
     <link rel="stylesheet" href="popup.css"/>
   </head>
   <body>
-    <main class="wrap">
-      <h1>TopText</h1>
-      <p>Gestisci i trigger nelle <a href="settings.html" target="_blank">Impostazioni</a>.</p>
-    </main>
+    <div class="app-container">
+      <header class="app-header">
+        <div class="logo">
+          <div class="logo-icon">TT</div>
+          <span class="logo-text">TopText</span>
+        </div>
+      </header>
+      
+      <main class="main-content">
+        <div class="welcome-section">
+          <h1 class="welcome-title">Benvenuto in TopText</h1>
+          <p class="welcome-subtitle">Gestisci i tuoi trigger di testo personalizzati</p>
+        </div>
+        
+        <div class="quick-actions">
+          <div class="action-card">
+            <div class="action-icon">⚙️</div>
+            <div class="action-content">
+              <h3>Impostazioni</h3>
+              <p>Gestisci i tuoi trigger</p>
+            </div>
+            <a href="settings.html" target="_blank" class="action-button">
+              Apri
+            </a>
+          </div>
+        </div>
+        
+        <div class="status-section">
+          <div class="status-card">
+            <div class="status-icon">✅</div>
+            <div class="status-content">
+              <h4>Estensione Attiva</h4>
+              <p>I tuoi trigger sono pronti all'uso</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
     <script src="popup.js"></script>
   </body>
 </html>

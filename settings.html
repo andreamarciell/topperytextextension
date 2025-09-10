@@ -7,70 +7,143 @@
     <link rel="stylesheet" href="settings.css"/>
   </head>
   <body>
-    <main class="container">
-
-      <section id="auth-gate" class="card" style="display:none">
-        <h2>accedi a toppery text</h2>
-        <p class="muted">effettua il login o registrati per salvare i tuoi trigger sul tuo profilo</p>
-
-        <div class="row">
-          <label>Email</label>
-          <input id="auth-email" type="email" placeholder="nome@example.com" autocomplete="username"/>
-        </div>
-        <div class="row">
-          <label>Password</label>
-          <input id="auth-pass" type="password" placeholder="min 8 caratteri" autocomplete="current-password"/>
-        </div>
-
-        <div class="row between">
-          <div>
-            <button id="btn-login">login</button>
-            <button id="btn-register" class="secondary">registrati</button>
+    <div class="app-layout">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="logo">
+            <div class="logo-icon">TT</div>
+            <span class="logo-text">TopText</span>
           </div>
-          <div id="resend-wrap" class="muted tiny" style="display:none">non hai ricevuto l'email? <a href="#" id="btn-resend">rinvia verifica</a></div>
         </div>
-
-        <p id="auth-success" class="success"></p>
-        <p id="auth-error" class="error"></p>
-      </section>
-
-      <section id="app-section" style="display:none">
-        <header class="row between">
-          <h1>impostazioni</h1>
-          <button id="btn-logout" class="secondary">logout</button>
-        </header>
-        <p class="muted">gestisci i tuoi trigger e i testi sostitutivi</p>
-
-        <section class="card">
-          <h2>nuovo trigger</h2>
-          <div class="row">
-            <label>trigger</label>
-            <input id="trigger" placeholder="es. ;ciao"/>
+        
+        <nav class="sidebar-nav">
+          <div class="nav-item active">
+            <div class="nav-icon">⚙️</div>
+            <span>Impostazioni</span>
           </div>
-          <div class="row">
-            <label>testo sostitutivo</label>
-            <textarea id="replacement" rows="3" placeholder="testo che rimpiazza il trigger"></textarea>
+          <div class="nav-item">
+            <div class="nav-icon">📝</div>
+            <span>Trigger</span>
           </div>
-          <button id="save-button">aggiungi</button>
-<!-- ——— Import/Export triggers ——— -->
-<div class="row gap mt-8">
-  <button id="btn-import" class="btn secondary" type="button" title="Importa da .json">Importa</button>
-  <button id="btn-export" class="btn secondary" type="button" title="Esporta i tuoi trigger in .json">Esporta</button>
-</div>
-<input id="file-import" type="file" accept=".json,application/json" style="display:none" />
-          <p id="success" class="success"></p>
-          <p id="error" class="error"></p>
+        </nav>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Auth Gate Section -->
+        <section id="auth-gate" class="auth-section" style="display:none">
+          <div class="auth-container">
+            <div class="auth-header">
+              <h1>Accedi a TopText</h1>
+              <p class="auth-subtitle">Effettua il login o registrati per salvare i tuoi trigger sul tuo profilo</p>
+            </div>
+            
+            <div class="auth-form">
+              <div class="form-group">
+                <label for="auth-email">Email</label>
+                <input id="auth-email" type="email" placeholder="nome@example.com" autocomplete="username"/>
+              </div>
+              
+              <div class="form-group">
+                <label for="auth-pass">Password</label>
+                <input id="auth-pass" type="password" placeholder="min 8 caratteri" autocomplete="current-password"/>
+              </div>
+              
+              <div class="auth-actions">
+                <button id="btn-login" class="btn-primary">Login</button>
+                <button id="btn-register" class="btn-secondary">Registrati</button>
+              </div>
+              
+              <div id="resend-wrap" class="resend-section" style="display:none">
+                <p class="resend-text">Non hai ricevuto l'email? <a href="#" id="btn-resend" class="resend-link">Rinvia verifica</a></p>
+              </div>
+              
+              <div class="auth-messages">
+                <p id="auth-success" class="message success"></p>
+                <p id="auth-error" class="message error"></p>
+              </div>
+            </div>
+          </div>
         </section>
 
-        <section class="card">
-          <div class="row between">
-            <h2>i tuoi trigger</h2>
-            <span id="trigger-count" class="muted">0</span>
+        <!-- App Section -->
+        <section id="app-section" class="app-section" style="display:none">
+          <header class="page-header">
+            <div class="header-content">
+              <h1>Impostazioni</h1>
+              <p class="page-subtitle">Gestisci i tuoi trigger e i testi sostitutivi</p>
+            </div>
+            <button id="btn-logout" class="btn-logout">
+              <span class="logout-icon">🚪</span>
+              Logout
+            </button>
+          </header>
+
+          <div class="content-grid">
+            <!-- New Trigger Card -->
+            <div class="card">
+              <div class="card-header">
+                <h2>Nuovo Trigger</h2>
+                <p class="card-description">Crea un nuovo trigger per sostituire il testo</p>
+              </div>
+              
+              <div class="card-content">
+                <div class="form-group">
+                  <label for="trigger">Trigger</label>
+                  <input id="trigger" placeholder="es. ;ciao"/>
+                </div>
+                
+                <div class="form-group">
+                  <label for="replacement">Testo Sostitutivo</label>
+                  <textarea id="replacement" rows="3" placeholder="testo che rimpiazza il trigger"></textarea>
+                </div>
+                
+                <div class="form-actions">
+                  <button id="save-button" class="btn-primary">Aggiungi</button>
+                </div>
+                
+                <!-- Import/Export Section -->
+                <div class="import-export-section">
+                  <div class="section-divider"></div>
+                  <div class="import-export-actions">
+                    <button id="btn-import" class="btn-secondary" type="button" title="Importa da .json">
+                      <span class="btn-icon">📥</span>
+                      Importa
+                    </button>
+                    <button id="btn-export" class="btn-secondary" type="button" title="Esporta i tuoi trigger in .json">
+                      <span class="btn-icon">📤</span>
+                      Esporta
+                    </button>
+                  </div>
+                </div>
+                
+                <input id="file-import" type="file" accept=".json,application/json" style="display:none" />
+                
+                <div class="form-messages">
+                  <p id="success" class="message success"></p>
+                  <p id="error" class="message error"></p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Triggers List Card -->
+            <div class="card">
+              <div class="card-header">
+                <div class="header-row">
+                  <h2>I Tuoi Trigger</h2>
+                  <span id="trigger-count" class="trigger-count">0</span>
+                </div>
+              </div>
+              
+              <div class="card-content">
+                <ul id="trigger-list" class="trigger-list"></ul>
+              </div>
+            </div>
           </div>
-          <ul id="trigger-list" class="list"></ul>
         </section>
-      </section>
-    </main>
+      </main>
+    </div>
 
     <script type="module" src="settings.js"></script>
   </body>
